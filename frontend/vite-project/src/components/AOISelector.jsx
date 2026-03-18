@@ -1,4 +1,5 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { saveAOI } from "../services/api"
 
 function AOISelector({ aoi, setAoi }) {
   // Manual AOI for quick testing
@@ -31,6 +32,9 @@ function AOISelector({ aoi, setAoi }) {
     setAoi(null)
   }
 
+  const [isSaving, setSaving] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+
   // Get area from aoi object or calculate it
   const getArea = () => {
     if (!aoi || !aoi.bbox) return 0
@@ -49,6 +53,21 @@ function AOISelector({ aoi, setAoi }) {
     }
   }, [aoi])
 
+  const handleAddAoi = async () => {
+    if (!aoi || !aoi.bbox) return
+    const name = window.prompt('Name this AOI before saving', `AOI ${new Date().toLocaleDateString()}`)
+    if (!name) return
+    setSaving(true)
+    setFeedback(null)
+    const payload = await saveAOI({ name, bbox: aoi.bbox })
+    if (payload.success) {
+      setFeedback('Saved to AOI Manager')
+    } else {
+      setFeedback(payload.error || 'Unable to save AOI')
+    }
+    setSaving(false)
+  }
+
   return (
     <div style={styles.container}>
       <h3 style={styles.title}>
@@ -57,29 +76,37 @@ function AOISelector({ aoi, setAoi }) {
       </h3>
 
       {aoi ? (
-        <div style={styles.successState}>
-          <div style={styles.successBox}>
-            <div style={styles.successHeader}>
-              <span style={styles.checkmark}>✅</span>
-              <span style={styles.successText}>AOI Selected</span>
-            </div>
-            <div style={styles.bboxContainer}>
-              <label style={styles.bboxLabel}>Bounding Box</label>
-              <div style={styles.bboxValue}>
-                [{aoi.bbox.map(n => n.toFixed(4)).join(", ")}]
+        <>
+          <div style={styles.successState}>
+            <div style={styles.successBox}>
+              <div style={styles.successHeader}>
+                <span style={styles.checkmark}>✅</span>
+                <span style={styles.successText}>AOI Selected</span>
+              </div>
+              <div style={styles.bboxContainer}>
+                <label style={styles.bboxLabel}>Bounding Box</label>
+                <div style={styles.bboxValue}>
+                  [{aoi.bbox.map((n) => n.toFixed(4)).join(", ")}]
+                </div>
+              </div>
+              <div style={styles.areaInfo}>
+                <span style={styles.areaLabel}>Approx Area:</span>
+                <span style={styles.areaValue}>
+                  {getArea().toFixed(1)} km²
+                </span>
               </div>
             </div>
-            <div style={styles.areaInfo}>
-              <span style={styles.areaLabel}>Approx Area:</span>
-              <span style={styles.areaValue}>
-                {getArea().toFixed(1)} km²
-              </span>
+            <div style={styles.buttonRow}>
+              <button onClick={clearAOI} style={styles.clearButton}>
+                <span>🗑️</span> Clear Selection
+              </button>
+              <button onClick={handleAddAoi} style={styles.addButton} disabled={isSaving}>
+                {isSaving ? 'Saving…' : 'Add to AOI'}
+              </button>
             </div>
           </div>
-          <button onClick={clearAOI} style={styles.clearButton}>
-            <span>🗑️</span> Clear Selection
-          </button>
-        </div>
+          {feedback && <p style={styles.feedback}>{feedback}</p>}
+        </>
       ) : (
         <div style={styles.emptyState}>
           <div style={styles.drawPrompt}>
@@ -118,7 +145,8 @@ const styles = {
   container: {
     display: "flex",
     flexDirection: "column",
-    height: "100%"
+    minHeight: "320px",
+    maxHeight: "430px"
   },
   title: {
     margin: "0 0 12px 0",
@@ -199,6 +227,10 @@ const styles = {
     color: "#00e676",
     fontSize: "0.85rem"
   },
+  buttonRow: {
+    display: "flex",
+    gap: "10px"
+  },
   clearButton: {
     width: "100%",
     padding: "10px",
@@ -215,6 +247,27 @@ const styles = {
     gap: "6px",
     transition: "all 0.2s ease",
     fontFamily: "'Inter', sans-serif"
+  },
+  addButton: {
+    flex: 1,
+    padding: "10px",
+    borderRadius: "6px",
+    border: "1px solid rgba(0, 212, 255, 0.4)",
+    background: "rgba(0, 212, 255, 0.15)",
+    color: "#00d4ff",
+    fontWeight: "600",
+    cursor: "pointer",
+    fontSize: "0.8rem",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    fontFamily: "'Inter', sans-serif"
+  },
+  feedback: {
+    marginTop: "8px",
+    color: "#00d4ff",
+    fontSize: "0.75rem"
   },
   
   // Empty state
