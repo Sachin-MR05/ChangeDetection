@@ -3,9 +3,9 @@ const db = require('../config/db');
 // Create detection_history table if it doesn't exist
 const initializeHistoryTable = async () => {
   const queryText = `
-    CREATE TABLE IF NOT EXISTS detection_history (
+    CREATE TABLE IF NOT EXISTS public.detection_history (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES public.users(id) ON DELETE CASCADE,
       change_percentage DECIMAL(5,2) NOT NULL,
       start_date VARCHAR(20) NOT NULL,
       end_date VARCHAR(20) NOT NULL,
@@ -23,7 +23,7 @@ const initializeHistoryTable = async () => {
 
 const createHistoryEntry = async (userId, changePercentage, startDate, endDate, boundingBox) => {
   const queryText = `
-    INSERT INTO detection_history(user_id, change_percentage, start_date, end_date, bounding_box)
+    INSERT INTO public.detection_history(user_id, change_percentage, start_date, end_date, bounding_box)
     VALUES($1, $2, $3, $4, $5)
     RETURNING *
   `;
@@ -39,7 +39,7 @@ const createHistoryEntry = async (userId, changePercentage, startDate, endDate, 
 
 const getHistoryByUserId = async (userId) => {
   const queryText = `
-    SELECT * FROM detection_history
+    SELECT * FROM public.detection_history
     WHERE user_id = $1
     ORDER BY created_at DESC
   `;
