@@ -40,14 +40,20 @@ const { INTERNAL_ERROR } = require("./constants/errorCodes");
 
 // Central error handler
 app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${err.message}`);
   console.error(err.stack);
-  return responseHelper.error(
-    res,
-    INTERNAL_ERROR,
-    "An unexpected internal server error occurred.",
-    null,
-    500
-  );
+  try {
+    return responseHelper.error(
+      res,
+      INTERNAL_ERROR,
+      "An unexpected internal server error occurred.",
+      null,
+      500
+    );
+  } catch (handlerErr) {
+    console.error(`[FATAL] Error handler crashed:`, handlerErr.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
@@ -55,7 +61,7 @@ const { initializeUserTable } = require('./models/userModel');
 const { initializeHistoryTable } = require('./models/historyModel');
 const { initializeAoiTable } = require('./models/aoiModel');
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`[STARTUP] Server starting on port ${PORT}`);
   
   // Log environment variables (not secrets)
