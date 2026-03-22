@@ -61,3 +61,4 @@ jobs:
         with:
           app-name: 'ChangeDetection'
           slot-name: 'Production'
+          clean: true
