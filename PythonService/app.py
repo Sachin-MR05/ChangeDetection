@@ -18,7 +18,7 @@ model = None
 @app.on_event("startup")
 async def startup_event():
     global model
-    model_path = os.getenv("MODEL_PATH", "../ml-service/siamese_unet_final.pth")
+    model_path = os.getenv("MODEL_PATH", "../siamese_unet_final.pth")
     device = os.getenv("DEVICE", "cpu")
     model = ChangeDetectionModel(model_path, device)
     print(f"✅ ML Model loaded from {model_path}")
