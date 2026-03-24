@@ -1,6 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
-const fs = require("fs").promises;
 const jwt = require("jsonwebtoken");
 const { INTERNAL_ERROR, MODEL_FAILURE, NO_IMAGERY_AVAILABLE } = require("../constants/errorCodes");
 const responseHelper = require("../utils/responseHelper");
@@ -59,37 +58,21 @@ const detectChange = async (req, res) => {
     );
     console.log(`[${request_id}] Images ready (demo_mode: ${imagePaths.is_demo_mode})`);
 
-    // 6. READ IMAGES AND CONVERT TO BASE64
-    console.log(`[${request_id}] Encoding images to base64...`);
-    let pastImageBase64, currentImageBase64;
-    try {
-      const pastImageBuffer = await fs.readFile(imagePaths.past_image_path);
-      const currentImageBuffer = await fs.readFile(imagePaths.current_image_path);
-      
-      pastImageBase64 = pastImageBuffer.toString("base64");
-      currentImageBase64 = currentImageBuffer.toString("base64");
-      console.log(`[${request_id}] Images encoded (past: ${pastImageBase64.length} bytes, current: ${currentImageBase64.length} bytes)`);
-    } catch (encodeErr) {
-      console.error(`[${request_id}] Failed to encode images:`, encodeErr.message);
-      return responseHelper.error(res, INTERNAL_ERROR, "Failed to prepare images for processing", null, 500);
-    }
-
-    // 7. FORWARD TO PYTHON SERVICE (HTTP CALL)
+    // 6. FORWARD TO PYTHON SERVICE (HTTP CALL)
     let detectionResult;
     try {
       const pythonPayload = {
         request_id,
-        past_image_data: pastImageBase64,
-        current_image_data: currentImageBase64,
-        image_format: "png",
+        past_image_path: imagePaths.past_image_path,
+        current_image_path: imagePaths.current_image_path,
+        output_dir: workspace.outputs,
         aoi_bbox: bbox
       };
 
-      console.log(`[${request_id}] Sending request to ML service...`);
       const pythonResponse = await axios.post(
         `${config.pythonServiceUrl}/predict-change`,
         pythonPayload,
-        { timeout: 60000 }
+        { timeout: 30000 }
       );
       
       detectionResult = pythonResponse.data;
