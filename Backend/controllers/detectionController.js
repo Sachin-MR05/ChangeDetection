@@ -163,6 +163,9 @@ const detectChange = async (req, res) => {
       }
     }
 
+    // Construct absolute URLs for images (required for Vercel deployment where frontend domain ≠ backend domain)
+    const baseUrl = config.backendUrl.replace(/\/$/, ''); // Remove trailing slash if present
+    
     const finalResponse = {
       status: "success",
       data: {
@@ -179,14 +182,14 @@ const detectChange = async (req, res) => {
           total_pixels: 256 * 256
         },
         outputs: {
-          change_map: `/api/results/${request_id}/outputs/${path.basename(detectionResult.change_map_path)}`,
-          heatmap: detectionResult.heatmap_path ? `/api/results/${request_id}/outputs/${path.basename(detectionResult.heatmap_path)}` : null,
+          change_map: `${baseUrl}/api/results/${request_id}/outputs/${path.basename(detectionResult.change_map_path)}`,
+          heatmap: detectionResult.heatmap_path ? `${baseUrl}/api/results/${request_id}/outputs/${path.basename(detectionResult.heatmap_path)}` : null,
           // Add raw satellite images
-          past_image: `/api/results/${request_id}/raw/past.png`,
-          current_image: `/api/results/${request_id}/raw/current.png`,
+          past_image: `${baseUrl}/api/results/${request_id}/raw/past.png`,
+          current_image: `${baseUrl}/api/results/${request_id}/raw/current.png`,
           // High-resolution versions for better display
-          past_image_hires: `/api/results/${request_id}/raw/past_hires.png`,
-          current_image_hires: `/api/results/${request_id}/raw/current_hires.png`
+          past_image_hires: `${baseUrl}/api/results/${request_id}/raw/past_hires.png`,
+          current_image_hires: `${baseUrl}/api/results/${request_id}/raw/current_hires.png`
         },
         metadata: {
           satellite_source: imagePaths.is_demo_mode ? "Demo (Synthetic)" : "Sentinel-2 MSI Level-2A",
