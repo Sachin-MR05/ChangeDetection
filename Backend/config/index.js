@@ -6,6 +6,7 @@ const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   storageDir: process.env.STORAGE_DIR || path.join(__dirname, "../../data"),
   useDemoMode: process.env.USE_DEMO_MODE === "true",
+  sendImagesAsBase64: process.env.SEND_IMAGES_AS_BASE64 === "true",
   copernicus: {
     clientId: process.env.CLIENT_ID,
     clientSecret: process.env.CLIENT_SECRET,
@@ -14,5 +15,10 @@ const config = {
   },
   pythonServiceUrl: process.env.PYTHON_SERVICE_URL || "http://localhost:5000",
 };
+
+// Debug logging
+console.log(`[CONFIG] SEND_IMAGES_AS_BASE64 env value: "${process.env.SEND_IMAGES_AS_BASE64}"`);
+console.log(`[CONFIG] sendImagesAsBase64 parsed as: ${config.sendImagesAsBase64}`);
+console.log(`[CONFIG] PYTHON_SERVICE_URL: ${config.pythonServiceUrl}`);
 
 module.exports = config;

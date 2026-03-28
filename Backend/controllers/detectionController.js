@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
+const fs = require("fs").promises;
 const jwt = require("jsonwebtoken");
 const { INTERNAL_ERROR, MODEL_FAILURE, NO_IMAGERY_AVAILABLE } = require("../constants/errorCodes");
 const responseHelper = require("../utils/responseHelper");
@@ -61,21 +62,76 @@ const detectChange = async (req, res) => {
     // 6. FORWARD TO PYTHON SERVICE (HTTP CALL)
     let detectionResult;
     try {
-      const pythonPayload = {
-        request_id,
-        past_image_path: imagePaths.past_image_path,
-        current_image_path: imagePaths.current_image_path,
-        output_dir: workspace.outputs,
-        aoi_bbox: bbox
-      };
+      let pythonPayload;
+      
+      if (config.sendImagesAsBase64) {
+        // Mode: Send images as base64 (for distributed/production deployments)
+        console.log(`[${request_id}] Encoding images to base64...`);
+        const pastImageBuffer = await fs.readFile(imagePaths.past_image_path);
+        const currentImageBuffer = await fs.readFile(imagePaths.current_image_path);
+        
+        const pastImageBase64 = pastImageBuffer.toString("base64");
+        const currentImageBase64 = currentImageBuffer.toString("base64");
+        
+        console.log(`[${request_id}] Images encoded (past: ${pastImageBase64.length} bytes, current: ${currentImageBase64.length} bytes)`);
+        
+        pythonPayload = {
+          request_id,
+          past_image_data: pastImageBase64,
+          current_image_data: currentImageBase64,
+          output_dir: workspace.outputs,
+          image_format: "png",
+          aoi_bbox: bbox
+        };
+      } else {
+        // Mode: Send file paths (for local development)
+        console.log(`[${request_id}] Sending file paths to Python service...`);
+        pythonPayload = {
+          request_id,
+          past_image_path: imagePaths.past_image_path,
+          current_image_path: imagePaths.current_image_path,
+          output_dir: workspace.outputs,
+          aoi_bbox: bbox
+        };
+      }
 
+      console.log(`[${request_id}] Sending request to ML service...`);
       const pythonResponse = await axios.post(
         `${config.pythonServiceUrl}/predict-change`,
         pythonPayload,
-        { timeout: 30000 }
+        { timeout: 60000 }
       );
       
       detectionResult = pythonResponse.data;
+      
+      // Handle hybrid mode: if Python service returned base64 data, decode and save to files
+      if (detectionResult.change_map_data) {
+        console.log(`[${request_id}] Received base64-encoded results, decoding and saving files...`);
+        
+        // Ensure outputs directory exists
+        const outputsDir = workspace.outputs;
+        await fs.mkdir(outputsDir, { recursive: true });
+        
+        // Decode change map
+        const changeMapBuffer = Buffer.from(detectionResult.change_map_data, 'base64');
+        const changeMapPath = path.join(outputsDir, `${request_id}_change_map.png`);
+        await fs.writeFile(changeMapPath, changeMapBuffer);
+        detectionResult.change_map_path = changeMapPath;
+        console.log(`[${request_id}] Decoded and saved change map (${changeMapBuffer.length} bytes)`);
+        
+        // Decode heatmap if present
+        if (detectionResult.heatmap_data) {
+          const heatmapBuffer = Buffer.from(detectionResult.heatmap_data, 'base64');
+          const heatmapPath = path.join(outputsDir, `${request_id}_heatmap.png`);
+          await fs.writeFile(heatmapPath, heatmapBuffer);
+          detectionResult.heatmap_path = heatmapPath;
+          console.log(`[${request_id}] Decoded and saved heatmap (${heatmapBuffer.length} bytes)`);
+        }
+        
+        // Clear base64 data from response
+        delete detectionResult.change_map_data;
+        delete detectionResult.heatmap_data;
+      }
     } catch (svcErr) {
       console.error(`[${request_id}] Python Service Failure:`, svcErr.message);
       
@@ -123,11 +179,14 @@ const detectChange = async (req, res) => {
           total_pixels: 256 * 256
         },
         outputs: {
-          change_map: `/api/results/${request_id}/${path.basename(detectionResult.change_map_path)}`,
-          heatmap: detectionResult.heatmap_path ? `/api/results/${request_id}/${path.basename(detectionResult.heatmap_path)}` : null,
+          change_map: `/api/results/${request_id}/outputs/${path.basename(detectionResult.change_map_path)}`,
+          heatmap: detectionResult.heatmap_path ? `/api/results/${request_id}/outputs/${path.basename(detectionResult.heatmap_path)}` : null,
           // Add raw satellite images
           past_image: `/api/results/${request_id}/raw/past.png`,
-          current_image: `/api/results/${request_id}/raw/current.png`
+          current_image: `/api/results/${request_id}/raw/current.png`,
+          // High-resolution versions for better display
+          past_image_hires: `/api/results/${request_id}/raw/past_hires.png`,
+          current_image_hires: `/api/results/${request_id}/raw/current_hires.png`
         },
         metadata: {
           satellite_source: imagePaths.is_demo_mode ? "Demo (Synthetic)" : "Sentinel-2 MSI Level-2A",

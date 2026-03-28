@@ -88,32 +88,54 @@ class ChangeDetectionModel:
     
     def __init__(self, model_path, device="cpu"):
         """Load model at initialization"""
-        self.model_path = model_path
+        import os
+        self.model_path = os.path.abspath(model_path)
         self.device = torch.device(device)
+        
+        print(f"[MODEL] Looking for model at: {self.model_path}")
         
         # Load the trained model
         self.model = SiameseUNet()
         
-        if os.path.exists(model_path):
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-            print(f"✅ Loaded trained model from {model_path}")
+        if os.path.exists(self.model_path):
+            try:
+                checkpoint = torch.load(self.model_path, map_location=self.device)
+                self.model.load_state_dict(checkpoint)
+                print(f"[MODEL] Successfully loaded trained model from {self.model_path}")
+                print(f"[MODEL] Model contains {len(checkpoint)} parameter tensors")
+                
+                # Verify model is not random by checking a sample weight
+                sample_weight = list(checkpoint.values())[0]
+                print(f"[MODEL] Sample weight shape: {sample_weight.shape}, mean: {sample_weight.mean():.6f}, std: {sample_weight.std():.6f}")
+            except Exception as e:
+                print(f"[MODEL] ERROR: Failed to load model weights: {str(e)}")
+                print(f"[MODEL] WARNING: Using untrained model (random weights)")
         else:
-            print(f"⚠️  Model file not found at {model_path}, using untrained model")
+            print(f"[MODEL] ERROR: Model file not found at {self.model_path}")
+            print(f"[MODEL] WARNING: Using untrained model (random weights)")
         
         self.model.to(self.device)
         self.model.eval()
+        print(f"[MODEL] Model initialized on device: {self.device}")
     
     def preprocess_image(self, image_path, target_size=(256, 256)):
         """
         Load and preprocess image for model input
         """
+        print(f"[PREPROCESS] Loading image from: {image_path}")
+        
         img = cv2.imread(image_path)
         if img is None:
             raise FileNotFoundError(f"Failed to load image: {image_path}")
         
+        print(f"[PREPROCESS] Image shape before resize: {img.shape}, dtype: {img.dtype}, min: {img.min()}, max: {img.max()}")
+        
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, target_size)
         img = img.astype(np.float32) / 255.0
+        
+        print(f"[PREPROCESS] Image shape after preprocessing: {img.shape}, normalized min: {img.min():.4f}, max: {img.max():.4f}")
+        
         img = np.transpose(img, (2, 0, 1))  # HWC to CHW
         img = torch.from_numpy(img).unsqueeze(0)  # Add batch dimension
         return img
@@ -124,6 +146,7 @@ class ChangeDetectionModel:
         """
         try:
             # Load and preprocess images
+            print(f"[INFERENCE] Starting change detection for {request_id}")
             past_img = self.preprocess_image(past_image_path)
             current_img = self.preprocess_image(current_image_path)
             
@@ -131,12 +154,15 @@ class ChangeDetectionModel:
             past_img = past_img.to(self.device)
             current_img = current_img.to(self.device)
             
+            print(f"[INFERENCE] Running model inference...")
             # Run inference
             with torch.no_grad():
                 change_map = self.model(past_img, current_img)
             
             # Post-process output
             change_map = change_map.cpu().squeeze().numpy()
+            print(f"[INFERENCE] Raw change map shape: {change_map.shape}, min: {change_map.min():.4f}, max: {change_map.max():.4f}")
+            
             change_map = (change_map * 255).astype(np.uint8)
             
             # Calculate change percentage
@@ -144,6 +170,8 @@ class ChangeDetectionModel:
             changed_pixels = np.sum(change_map > (threshold * 255))
             total_pixels = change_map.shape[0] * change_map.shape[1]
             change_percentage = (changed_pixels / total_pixels) * 100
+            
+            print(f"[INFERENCE] Changed pixels: {changed_pixels}/{total_pixels}, Percentage: {change_percentage:.2f}%")
             
             # Ensure valid range
             change_percentage = max(0.0, min(100.0, change_percentage))
@@ -160,6 +188,8 @@ class ChangeDetectionModel:
             _, binary = cv2.threshold(change_map, int(threshold * 255), 255, cv2.THRESH_BINARY)
             cv2.imwrite(heatmap_path, binary)
             
+            print(f"[INFERENCE] Change detection complete: {change_percentage:.2f}%")
+            
             return {
                 "change_percentage": round(change_percentage, 2),
                 "change_map_path": change_map_path,
@@ -167,5 +197,5 @@ class ChangeDetectionModel:
             }
             
         except Exception as e:
-            print(f"❌ Model inference error: {str(e)}")
+            print(f"[INFERENCE] ERROR: Model inference error: {str(e)}")
             raise

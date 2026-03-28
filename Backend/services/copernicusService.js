@@ -43,7 +43,7 @@ const copernicusService = {
   },
 
   /**
-   * Build evalscript for Sentinel-2 true color with cloud masking
+   * Build evalscript for Sentinel-2 true color with enhanced contrast
    */
   buildEvalscript() {
     return `
@@ -56,12 +56,13 @@ function setup() {
 }
 
 function evaluatePixel(sample) {
-  // SCL cloud mask: 3=shadow, 8=cloud medium, 9=cloud high, 10=cirrus
-  if ([3, 8, 9, 10].includes(sample.SCL)) {
-    return [0, 0, 0]; // mask clouds as black
+  // SCL cloud mask - only mask high confidence clouds and cirrus
+  if ([9, 10].includes(sample.SCL)) {
+    return [0, 0, 0];
   }
-  // True color RGB (B04=Red, B03=Green, B02=Blue)
-  let gain = 2.5;
+  
+  // True color RGB with enhanced contrast and brightness
+  let gain = 3.5;  // Increased from 2.5 for better visibility
   return [
     Math.min(255, sample.B04 * gain * 255),
     Math.min(255, sample.B03 * gain * 255),
@@ -97,7 +98,7 @@ function evaluatePixel(sample) {
               from: `${dateFrom}T00:00:00Z`,
               to: `${dateTo}T23:59:59Z`
             },
-            maxCloudCoverage: 30
+            maxCloudCoverage: 50
           },
           processing: {
             harmonizeValues: true
@@ -110,8 +111,8 @@ function evaluatePixel(sample) {
           identifier: "default",
           format: { type: "image/png" }
         }],
-        width: 256,
-        height: 256
+        width: 1024,
+        height: 1024
       }
     };
 

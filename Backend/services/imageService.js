@@ -10,18 +10,30 @@ const imageService = {
   /**
    * Download actual Copernicus imagery using Process API
    */
-  async downloadSceneImage(bbox, scene, outputPath) {
+  async downloadSceneImage(bbox, scene, outputPath, outputPath256 = null) {
     try {
       const result = await copernicusService.downloadSceneImage(bbox, scene);
       
-      // Process and save the image (resize to 256x256 for model)
+      // Save full resolution (1024x1024) for display
       await sharp(result.data)
-        .resize(256, 256, { fit: "cover" })
+        .modulate({ brightness: 1.05 })
         .png()
         .toFile(outputPath);
       
-      console.log(`✅ Image saved: ${outputPath}`);
-      return { success: true, path: outputPath };
+      console.log(`✅ Image saved (full-res): ${outputPath}`);
+      
+      // Also save 256x256 version for ML model if path provided
+      if (outputPath256) {
+        await sharp(result.data)
+          .resize(256, 256, { fit: "cover" })
+          .modulate({ brightness: 1.05 })
+          .png()
+          .toFile(outputPath256);
+        
+        console.log(`✅ Image saved (256x256): ${outputPath256}`);
+      }
+      
+      return { success: true, path: outputPath, path256: outputPath256 };
     } catch (error) {
       console.log(`Image download failed: ${error.message}`);
       return { success: false, error: error.message };
@@ -90,44 +102,56 @@ const imageService = {
   
   /**
    * Fetch images for a change detection request
-   * Tries real download first, falls back to demo images
+   * Returns both high-res (for display) and 256x256 (for ML model)
    */
   async fetchProjectImages(workspace, scene1, scene2, bbox, useDemoMode = false) {
-    const pastImagePath = path.join(workspace.raw, "past.png");
-    const currentImagePath = path.join(workspace.raw, "current.png");
+    // High-res paths (for display)
+    const pastImagePathHires = path.join(workspace.raw, "past_hires.png");
+    const currentImagePathHires = path.join(workspace.raw, "current_hires.png");
+    
+    // 256x256 paths (for ML model)
+    const pastImagePath256 = path.join(workspace.raw, "past.png");
+    const currentImagePath256 = path.join(workspace.raw, "current.png");
     
     let pastResult, currentResult;
     let isDemo = useDemoMode;
     
     if (!useDemoMode) {
       // Try to download real images using Process API
-      console.log("📡 Downloading real satellite imagery...");
+      console.log("Downloading real satellite imagery...");
       
       [pastResult, currentResult] = await Promise.all([
-        this.downloadSceneImage(bbox, scene1, pastImagePath),
-        this.downloadSceneImage(bbox, scene2, currentImagePath)
+        this.downloadSceneImage(bbox, scene1, pastImagePathHires, pastImagePath256),
+        this.downloadSceneImage(bbox, scene2, currentImagePathHires, currentImagePath256)
       ]);
       
       isDemo = !pastResult.success || !currentResult.success;
       
       if (isDemo) {
-        console.log("⚠️ Real download failed, falling back to demo mode");
+        console.log("Real download failed, falling back to demo mode");
       }
     }
     
     if (isDemo) {
-      // Generate demo images
-      console.log("🎨 Generating demo satellite imagery...");
+      // Generate demo images (256x256 only)
+      console.log("Generating demo satellite imagery...");
       
       await Promise.all([
-        this.generateDemoImage(pastImagePath, bbox, "past"),
-        this.generateDemoImage(currentImagePath, bbox, "current")
+        this.generateDemoImage(pastImagePath256, bbox, "past"),
+        this.generateDemoImage(currentImagePath256, bbox, "current")
       ]);
+      
+      // For demo mode, copy 256x256 to high-res path too
+      const fs = require("fs");
+      await fs.promises.copyFile(pastImagePath256, pastImagePathHires);
+      await fs.promises.copyFile(currentImagePath256, currentImagePathHires);
     }
     
     return {
-      past_image_path: pastImagePath,
-      current_image_path: currentImagePath,
+      past_image_path: pastImagePath256,        // For ML model (256x256)
+      current_image_path: currentImagePath256,  // For ML model (256x256)
+      past_image_path_hires: pastImagePathHires,     // For display (1024x1024)
+      current_image_path_hires: currentImagePathHires, // For display (1024x1024)
       is_demo_mode: isDemo
     };
   }

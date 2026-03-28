@@ -106,9 +106,9 @@ function Dashboard({
           changed_pixels: data.metrics?.changed_pixels || 0,
           total_pixels: data.metrics?.total_pixels || 0,
           change_map_url: data.outputs?.change_map || null,
-          // Add raw satellite images
-          past_image_url: data.outputs?.past_image || null,
-          current_image_url: data.outputs?.current_image || null,
+          // Use high-res images if available, otherwise fall back to standard resolution
+          past_image_url: data.outputs?.past_image_hires || data.outputs?.past_image || null,
+          current_image_url: data.outputs?.current_image_hires || data.outputs?.current_image || null,
           dates_used: data.dates,
           metadata: data.metadata
         });

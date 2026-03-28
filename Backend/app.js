@@ -1,4 +1,5 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 console.log(`[STARTUP] Loading environment from .env`);
 
 const express = require("express");
@@ -30,6 +31,26 @@ app.use((req, res, next) => {
 // Health check endpoint (runs before db initialization)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve static result files from /data directory
+app.use('/api/results', (req, res, next) => {
+  const dataPath = path.join(__dirname, '../data');
+  const requestedPath = path.join(dataPath, req.path);
+  
+  // Security: Prevent directory traversal
+  const normalizedPath = path.normalize(requestedPath);
+  const normalizedDataPath = path.normalize(dataPath);
+  if (!normalizedPath.startsWith(normalizedDataPath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  // Try to send the file
+  res.sendFile(requestedPath, (err) => {
+    if (err && err.code !== 'ECONNABORTED') {
+      next(); // File not found, continue to other routes
+    }
+  });
 });
 
 // API routes
